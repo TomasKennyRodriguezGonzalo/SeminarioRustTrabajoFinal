@@ -3,7 +3,7 @@
 pub use self::trabajo_final::ClubRef;
 mod fecha;
 #[ink::contract]
-mod trabajo_final {   
+pub mod trabajo_final {   
     
     use crate::fecha::Fecha;
     use ink::prelude::string::String;
@@ -22,9 +22,10 @@ mod trabajo_final {
         socios: Vec<Socio>,
         // Precio de cada categoría, en tokens por mes
         precios: [u128; 3],
-        // cantidad_pagos: u128,
-        cantidad_pagos_bonificacion: u128,
-        porcentaje_bonificacion: u128,
+        // 65535 meses suena como un máximo razonable...
+        cantidad_pagos_bonificacion: u16,
+        // el máximo es 100, así que con u8 sobra
+        porcentaje_bonificacion: u8,
         // permisos, etc.
         politica_autorizacion: bool,
         dueño: AccountId,
@@ -52,11 +53,27 @@ mod trabajo_final {
 
         #[ink(message)]
         pub fn set_politica_autorizacion(&mut self, usar_la_politica: bool) {
+            /// Sólo el dueño puede cambiar la política (para evitar que alguien la cierre accidentalmente antes de pasarse dueño)
+            assert!(self.soy_el_dueño(), "Sólo el dueño puede cambiar la política de autorización.");
             self.politica_autorizacion = usar_la_politica;
         }
+        
+        /// Estrictamente si sos el dueño actual
+        #[ink(message)]
+        pub fn soy_el_dueño(&self) -> bool {
+            self.dueño == Self::env().caller()
+        }
+
+        /// Si estás autorizado (con la política abierta, todos están autorizados)
+        #[ink(message)]
+        pub fn estoy_autorizado(&self) -> bool {
+            !self.politica_autorizacion || self.soy_el_dueño() || self.autorizados.contains(&Self::env().caller())
+        }
+
         #[ink(message)]
         pub fn cambiar_dueño(&mut self, nuevo_dueño: AccountId) {
-
+            assert!(!self.politica_autorizacion || self.soy_el_dueño(), "No autorizado (no es dueño)");
+            self.dueño = nuevo_dueño;
         }
         #[ink(message)]
         pub fn get_dueño(&self) -> AccountId {
@@ -65,11 +82,15 @@ mod trabajo_final {
 
         #[ink(message)]
         pub fn agregar_autorizado(&mut self, quien: AccountId) {
-            
+            assert!(!self.politica_autorizacion || self.soy_el_dueño(), "No autorizado (no es dueño)");
+            assert!(!self.autorizados.contains(&quien), "Esa cuenta ya está autorizada");
+            self.autorizados.push(quien);
         }
         #[ink(message)]
         pub fn quitar_autorizado(&mut self, quien: AccountId) {
-            
+            assert!(!self.politica_autorizacion || self.soy_el_dueño(), "No autorizado (no es dueño)");
+            let i = self.autorizados.iter().position(|&cuenta| cuenta == quien);
+            self.autorizados.swap_remove(i.expect("No se encuentra la cuenta autorizada."));
         }
         
         #[ink(message)]
@@ -79,6 +100,7 @@ mod trabajo_final {
 
         #[ink(message)]
         pub fn cambiar_nombre(&mut self, nuevo_nombre: String) {
+            assert!(self.estoy_autorizado(), "No autorizado");
             self.nombre = nuevo_nombre;
         }
 
@@ -88,20 +110,11 @@ mod trabajo_final {
         }
 
         #[ink(message)]
-        pub fn soy_el_dueño(&self) -> bool {
-            self.dueño == Self::env().caller()
-        }
-
-        #[ink(message)]
-        pub fn estoy_autorizado(&self) -> bool {
-            self.soy_el_dueño() || self.autorizados.contains(&Self::env().caller())
-        }
-
-        #[ink(message)]
         pub fn set_precio(&mut self, categoria: Categoria, nuevo_valor: u128) {
             self._set_precio(categoria, nuevo_valor);
         }
         pub fn _set_precio(&mut self, categoria: Categoria, nuevo_valor: u128) {
+            assert!(self.estoy_autorizado(), "No autorizado");
             self.precios[categoria.num()] = nuevo_valor;
         }
 
@@ -114,20 +127,24 @@ mod trabajo_final {
         }
 
         #[ink(message)]
-        pub fn set_bonificacion_pagos_consecutivos(&mut self, nuevo_valor:u128) {
+        pub fn set_cantidad_pagos_bonificacion(&mut self, nuevo_valor:u16) {
+            assert!(self.estoy_autorizado(), "No autorizado");
+            assert!(nuevo_valor > 0);
             self.cantidad_pagos_bonificacion = nuevo_valor;
         }
         #[ink(message)]
-        pub fn get_bonificacion_pagos_consecutivos(&self) -> u128 {
+        pub fn get_cantidad_pagos_bonificacion(&self) -> u16 {
             self.cantidad_pagos_bonificacion
         }
 
         #[ink(message)]
-        pub fn set_porcentaje_bonificacion_pagos_consecutivos(&mut self, nuevo_valor:u128) {
+        pub fn set_porcentaje_bonificacion_pagos_consecutivos(&mut self, nuevo_valor:u8) {
+            assert!(self.estoy_autorizado(), "No autorizado");
+            assert!(nuevo_valor > 0 && nuevo_valor < 100);
             self.porcentaje_bonificacion = nuevo_valor;
         }
         #[ink(message)]
-        pub fn get_porcentaje_bonificacion_pagos_consecutivos(&self) -> u128 {
+        pub fn get_porcentaje_bonificacion_pagos_consecutivos(&self) -> u8 {
             self.porcentaje_bonificacion
         }
 
@@ -136,6 +153,7 @@ mod trabajo_final {
             self._registrar_nuevo_socio(dni, nombre, categoria);
         }
         fn _registrar_nuevo_socio(&mut self, dni: u128, nombre: String, categoria: Categoria) {
+            assert!(self.estoy_autorizado(), "No autorizado");
             match self.buscar_socio(dni) {
                 Some(idx) => panic!("Ya existe un socio con el dni {dni}: ({:?})", self.socios[idx]),
                 None => (),
@@ -146,29 +164,24 @@ mod trabajo_final {
                 dni,
                 nombre,
                 categoria,
+                pagos_a_tiempo_consecutivos: 0,
             };
 
             let mut vencimiento: Fecha = self.obtener_fecha_actual();
             vencimiento.sumar_dias(10);
-            // self.cantidad_pagos += 1;
-            // let mut pagos_cliente: Vec<Vpagos> = Vec::new();
-            // self.generar_pagos(&mut pagos_cliente, fecha);
             let pago_final: Pago = Pago {
                 id_socio: self.pagos.len() as u64,
-                dni_socio: dni,
+                // dni_socio: dni,
                 monto: self.get_precio(categoria),
-                // categoria,
-                // deporte,
                 pagado: None,
                 vencimiento,
                 es_descuento: false
-                // vector_pagos: pagos_cliente
             };
             self.pagos.push(pago_final);
             self.socios.push(socio);
         }
 
-        // Busca un socio y retorna su id
+        /// Busca un socio y retorna su id
         fn buscar_socio(&self, dni: u128) -> Option<usize> {
             for (idx, socio) in self.socios.iter().enumerate() {
                 if socio.dni == dni {
@@ -176,6 +189,12 @@ mod trabajo_final {
                 }
             }
             None
+        }
+
+        /// Devuelve el socio con la id dada
+        #[ink(message)]
+        pub fn get_socio(&self, id: u64) -> Option<Socio> {
+            self.socios.get(id as usize).cloned()
         }
 
         // Obtiene el último pago del socio dado (que va a ser pendiente)
@@ -193,32 +212,74 @@ mod trabajo_final {
 
         #[ink(message)]
         pub fn realizar_pago(&mut self, dni: u128, monto: u128) {
+            self._realizar_pago(dni, monto)
+        }
+        fn _realizar_pago(&mut self, dni: u128, monto: u128) {
+            assert!(self.estoy_autorizado(), "No autorizado");
             let id_socio = match self.buscar_socio(dni) {
                 None => {
                     panic!("No existe ningún socio con el dni {dni}")
                 },
                 Some(id) => id
             };
-            let socio = self.socios.get(id_socio).unwrap();
             let id_pago = self.buscar_ultimo_pago(id_socio as u64);
-            let monto = self.get_precio(socio.categoria);
             let fecha_actual = self.obtener_fecha_actual();
+            
             let pago = self.pagos.get_mut(id_pago).unwrap();
+            assert_eq!(pago.monto, monto, "El monto a pagar es {}", pago.monto);
+            assert!(!pago.es_pagado());
             pago.pagado = Some (fecha_actual);
-            // generar el siguiente pago (SIN TERMINAR)
+            // los pagos con descuento no cuentan para el siguiente descuento
+            if pago.es_pagado_a_tiempo().unwrap() && !pago.es_descuento {
+                self.socios[id_socio].pagos_a_tiempo_consecutivos += 1;
+            }
+
+            // Generar el siguiente pago
+            let mut nuevo_pago = pago.clone();
+
             let mut fecha_siguiente = pago.vencimiento.clone();
             fecha_siguiente.sumar_dias(30);
+            nuevo_pago.pagado = None;
+            nuevo_pago.vencimiento = fecha_siguiente;
+            nuevo_pago.es_descuento = false;
+            let socio = &self.socios[id_socio];
+            nuevo_pago.monto = self.get_precio(socio.categoria);
 
+            // Aplicar bonificación
+            if socio.pagos_a_tiempo_consecutivos >= self.cantidad_pagos_bonificacion {
+                let procentaje_del_total = (100 - self.porcentaje_bonificacion) as u128;
+                self.socios[id_socio].pagos_a_tiempo_consecutivos = 0;
+                nuevo_pago.es_descuento = true;
+                assert!(nuevo_pago.monto <= u128::MAX / procentaje_del_total, "valor demasiado grande para aplicar descuento");
+                nuevo_pago.monto = nuevo_pago.monto * procentaje_del_total / 100; 
+            }
+
+            self.pagos.push(nuevo_pago);
         }
 
-        // cliente: Option<dni>
+        // Obtiene todos los pagos de todos los socios o el socio con dni especificado en el Option
         #[ink(message)]
-        pub fn get_pagos(&self, cliente: Option<u128>)->Vec<Pago>{
-            self.pagos.clone()
+        pub fn get_pagos(&self, socio: Option<u128>)-> Vec<Pago>{
+            if let Some(dni) = socio {
+                let id = self.buscar_socio(dni).expect("No existe socio con dni {dni}") as u64;
+                self.pagos.iter().filter(|&p| p.id_socio == id).map(|p| p.clone()).collect()
+            } else {
+                self.pagos.clone()
+            }
         }
-        
+
+        // #[ink(message)]
+        // pub fn obtener_socio_de_pago(&self, pago: Pago) -> Socio {
+        //     let id = pago.get_socio();
+        //     self.socios[id as usize].clone()
+        // }
+
+        #[ink(message)]
+        pub fn obtener_fecha_actual(&self) -> Fecha {
+            self._obtener_fecha_actual()
+        }
         // self.env().block_timestamp(): tiempo en milisengundos desde 01/01/1970
-        fn obtener_fecha_actual(&self) -> Fecha {
+        fn _obtener_fecha_actual(&self) -> Fecha {
             let milisegundos_desde_epoch = self.env().block_timestamp();
             let dias_desde_epoch = milisegundos_desde_epoch / 1000 / 60 / 60 / 24;
             let mut fecha = Fecha::new(1, 1, 1970).unwrap();
@@ -280,6 +341,18 @@ mod trabajo_final {
         dni:u128,
         nombre: String,
         categoria: Categoria,
+        pagos_a_tiempo_consecutivos: u16,
+    }
+    impl Socio {
+        pub fn get_dni(&self) -> u128 {
+            self.dni
+        }
+        pub fn get_nombre(&self) -> &str {
+            &self.nombre
+        }
+        pub fn get_categoria(&self) -> Categoria {
+            self.categoria
+        }
     }
 
     #[derive(scale::Decode, scale::Encode, Debug, Clone, PartialEq)]
@@ -289,7 +362,6 @@ mod trabajo_final {
     )]
     pub struct Pago {
         id_socio: u64,
-        dni_socio: u128,
         monto: u128,
         vencimiento: Fecha,
         pagado: Option<Fecha>,
@@ -299,6 +371,31 @@ mod trabajo_final {
     impl Pago {
         pub fn get_monto(&self) -> u128 {
             self.monto
+        }
+        pub fn get_socio(&self) -> u64 {
+            self.id_socio
+        }
+        pub fn get_vencimiento(&self) -> Fecha {
+            self.vencimiento
+        }
+        pub fn get_pagado(&self) -> Option<Fecha> {
+            self.pagado
+        }
+        pub fn get_es_descuento(&self) -> bool {
+            self.es_descuento
+        }
+        pub fn es_pagado(&self) -> bool {
+            self.pagado.is_some()
+        }
+        pub fn es_pagado_a_tiempo(&self) -> Option<bool> {
+            // no es mayor = es menor o igual = se pagó en el día de vencimiento o antes
+            self.pagado.map(|fecha_pagado| !fecha_pagado.es_mayor(&self.vencimiento))
+        }
+
+        // se interpreta moroso como que actualmente no está pago y pasó la fecha.
+        pub fn es_moroso(&self, fecha_actual: Fecha) -> bool {
+            if self.es_pagado() {return false;}
+            !fecha_actual.es_mayor(&self.vencimiento)
         }
     }
 }
@@ -349,7 +446,7 @@ mod tests {
         assert_eq!(club.get_precio(CategoriaC), 2000);
         assert_eq!(club.get_nombre(), "Seminario Rust");
         assert_eq!(club.get_pagos(None).len(), 0);
-        assert_eq!(club.get_bonificacion_pagos_consecutivos(), 5);
+        assert_eq!(club.get_cantidad_pagos_bonificacion(), 5);
         assert_eq!(club.get_porcentaje_bonificacion_pagos_consecutivos(), 10);
     }
 
@@ -405,27 +502,64 @@ mod tests {
         assert_eq!(club.get_pagos(Some(1)).len(), 1);
         assert_eq!(club.get_pagos(Some(2)).len(), 2);
         assert_eq!(club.get_pagos(Some(0))[0].get_monto(), club.get_precio(CategoriaA));
-        assert_eq!(club.get_pagos(Some(1))[0].get_monto(), club.get_precio(CategoriaA));
-        assert_eq!(club.get_pagos(Some(2))[0].get_monto(), club.get_precio(CategoriaA));
+        assert_eq!(club.get_pagos(Some(1))[0].get_monto(), club.get_precio(CategoriaB(Tenis)));
+        assert_eq!(club.get_pagos(Some(2))[0].get_monto(), club.get_precio(CategoriaC));
     }
+
 
     #[ink::test]
     fn bonificacion_test() {
         let mut club = generar_club();
-        club.set_bonificacion_pagos_consecutivos(2);
+        club.set_cantidad_pagos_bonificacion(2);
         club.set_porcentaje_bonificacion_pagos_consecutivos(25);
         club.set_precio(CategoriaA, 100);
         club.registrar_nuevo_socio(0, "".into(), Categoria::CategoriaA);
-        for _ in 0..10 {
-            club.realizar_pago(0, 9999); // Qué hacer si el monto es mayor?
-        }
-        assert_eq!(club.get_pagos(None)[0].get_monto(), 100);
-        assert_eq!(club.get_pagos(None)[1].get_monto(), 100);
-        assert_eq!(club.get_pagos(None)[2].get_monto(), 75);
+        club.realizar_pago(0, 100);
+        club.realizar_pago(0, 100);
+        club.realizar_pago(0, 75);
+        club.realizar_pago(0, 100);
+        club.realizar_pago(0, 100);
+        club.realizar_pago(0, 75);
+        club.realizar_pago(0, 100);
+        club.realizar_pago(0, 100);
+        club.realizar_pago(0, 75);
+        let pagos = club.get_pagos(None);
+        assert_eq!(pagos[0].get_monto(), 100);
+        assert_eq!(pagos[1].get_monto(), 100);
+        assert_eq!(pagos[2].get_monto(), 75);
+        assert_eq!(pagos[3].get_monto(), 100);
+        assert_eq!(pagos[4].get_monto(), 100);
+        assert_eq!(pagos[5].get_monto(), 75);
+    }
 
-        assert_eq!(club.get_pagos(None)[3].get_monto(), 100);
-        assert_eq!(club.get_pagos(None)[4].get_monto(), 100);
-        assert_eq!(club.get_pagos(None)[5].get_monto(), 75);
+    #[ink::test]
+    fn pagos_exactos_test() {
+        let mut club = generar_club();
+        club.set_cantidad_pagos_bonificacion(2);
+        club.set_porcentaje_bonificacion_pagos_consecutivos(25);
+        club.set_precio(CategoriaA, 100);
+        club.registrar_nuevo_socio(0, "".into(), Categoria::CategoriaA);
+        club.realizar_pago(0, 100);
+        assert!(panic::catch_unwind(|| {
+            club.clone().realizar_pago(0, 101);
+        }).is_err());
+        assert!(panic::catch_unwind(|| {
+            club.clone().realizar_pago(0, 99);
+        }).is_err());
+        assert!(panic::catch_unwind(|| {
+            club.clone().realizar_pago(0, 75);
+        }).is_err());
+        club.realizar_pago(0, 100);
+        assert!(panic::catch_unwind(|| {
+            club.clone().realizar_pago(0, 76);
+        }).is_err());
+        assert!(panic::catch_unwind(|| {
+            club.clone().realizar_pago(0, 74);
+        }).is_err());
+        assert!(panic::catch_unwind(|| {
+            club.clone().realizar_pago(0, 100);
+        }).is_err());
+        club.realizar_pago(0, 75);
     }
 
     #[ink::test]
@@ -438,18 +572,44 @@ mod tests {
         ser_bob();
         assert!(!club.soy_el_dueño());
         assert!(!club.estoy_autorizado());
+        // Bob no puede agregar autorizados
+        assert!(panic::catch_unwind(|| {
+            club.clone().agregar_autorizado(bob());
+        }).is_err());
+
+        ser_alicia();
         club.agregar_autorizado(bob());
         club.agregar_autorizado(carlos());
+        // doble autorización no es posible
+        assert!(panic::catch_unwind(|| {
+            club.clone().agregar_autorizado(bob());
+        }).is_err());
+        ser_bob();
         assert!(club.estoy_autorizado());
+        ser_alicia();
         club.quitar_autorizado(bob());
+        ser_bob();
         assert!(!club.estoy_autorizado());
         ser_carlos();
         assert!(club.estoy_autorizado());
+        // los autorizados no pueden agregar más autorizados
+        assert!(panic::catch_unwind(|| {
+            club.clone().agregar_autorizado(bob());
+        }).is_err());
+        assert!(panic::catch_unwind(|| {
+            club.clone().cambiar_dueño(carlos());
+        }).is_err());
+        ser_alicia();
+        club.cambiar_dueño(carlos());
+        assert!(!club.soy_el_dueño());
+        assert!(!club.estoy_autorizado());
+        ser_carlos();
+        assert!(club.soy_el_dueño());
     }
 
     #[ink::test]
     fn no_autorizacion_test() {
-        // Igual que el anterior, pero siempre están autorizados
+        // parecido al anterior, pero siempre están autorizados
         let mut club = generar_club();
         club.set_politica_autorizacion(false);
         ser_alicia();
@@ -469,31 +629,33 @@ mod tests {
 
 
     #[ink::test]
-    fn autorizacion_leer_cosas() {
+    fn autorizacion_leer_cosas_test() {
         let mut club = generar_club();
         ser_alicia();
+        club.set_politica_autorizacion(true);
         club.agregar_autorizado(carlos());
         club.registrar_nuevo_socio(0, "Alicia".to_string(), CategoriaC);
-        club.realizar_pago(0, 10000);
-        club.realizar_pago(0, 10000);
-        club.realizar_pago(0, 10000);
+        club.realizar_pago(0, 2000);
+        club.realizar_pago(0, 2000);
+        club.realizar_pago(0, 2000);
         ser_bob();
         // Incluso sin autorización, todas estas cosas se deberían poder leer
         assert_eq!(club.get_autorizados(), vec![carlos()]);
-        assert_eq!(club.get_bonificacion_pagos_consecutivos(), 5);
+        assert_eq!(club.get_cantidad_pagos_bonificacion(), 5);
         assert_eq!(club.get_porcentaje_bonificacion_pagos_consecutivos(), 10);
         assert_eq!(club.get_dueño(), alicia());
         assert_eq!(club.get_nombre(), "Seminario Rust");
         assert_eq!(club.get_precio(CategoriaA), 5000);
         assert_eq!(club.get_precio(CategoriaB(Paddle)), 3000);
         assert_eq!(club.get_precio(CategoriaC), 2000);
-        assert_eq!(club.get_pagos(None).len(), 3);
+        assert_eq!(club.get_pagos(None).len(), 4);
     }
 
     #[ink::test]
     fn autorizacion_hacer_cosas() {
         let mut club = generar_club();
         ser_alicia();
+        club.set_politica_autorizacion(true);
         club.registrar_nuevo_socio(0, "Alicia".to_string(), CategoriaC);
         ser_bob();
         // bob no debería poder hacer nada
@@ -504,13 +666,13 @@ mod tests {
             club.clone().agregar_autorizado(bob());
         }).is_err());
         assert!(panic::catch_unwind(|| {
-            club.clone().set_bonificacion_pagos_consecutivos(1);
+            club.clone().set_cantidad_pagos_bonificacion(1);
         }).is_err());
         assert!(panic::catch_unwind(|| {
             club.clone().set_porcentaje_bonificacion_pagos_consecutivos(100);
         }).is_err());
         assert!(panic::catch_unwind(|| {
-            club.clone().set_politica_autorizacion(true);
+            club.clone().set_politica_autorizacion(false);
         }).is_err());
         assert!(panic::catch_unwind(|| {
             club.clone().set_precio(CategoriaA, 0);

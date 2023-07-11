@@ -2,7 +2,9 @@
 #[ink::contract]
 mod trabajo_final_reporte {
     use ink::prelude::string::String;
+    use ink::prelude::collections::HashSet;
     use trabajo_final::ClubRef;
+    use trabajo_final::trabajo_final::Socio;
 
     #[ink(storage)]
     pub struct TrabajoFinalReporte {
@@ -25,6 +27,20 @@ mod trabajo_final_reporte {
         #[ink(message)]
         pub fn obtener_nombre(&self) -> String {
             self.club.get_nombre()
+        }
+
+        #[ink(message)]
+        pub fn obtener_socios_morosos(&self) -> Vec<Socio> {
+            // socios guardados por id
+            let mut socios_morosos: HashSet<u64> = HashSet::new();
+            let pagos = self.club.get_pagos(None);
+            let fecha_actual = self.club.obtener_fecha_actual();
+            for pago in pagos {
+                if pago.es_moroso(fecha_actual) {
+                    socios_morosos.insert(pago.get_socio());
+                }
+            }
+            socios_morosos.iter().map(|&id| self.club.get_socio(id).unwrap()).collect()
         }
     }
 }
