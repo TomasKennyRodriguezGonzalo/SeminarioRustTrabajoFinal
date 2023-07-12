@@ -217,6 +217,7 @@ impl PartialEq for Fecha {
         self.igual_que(other)
     }
 }
+impl Eq for Fecha {}
 
 
 #[test]

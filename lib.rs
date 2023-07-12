@@ -51,11 +51,7 @@ mod trabajo_final_reporte {
             for pago in pagos {
                 if let Some(fecha_pagado) = pago.get_pagado() {
                     if fecha_pagado.get_año() == año && fecha_pagado.get_mes() == mes {
-                        let i = match self.club.get_socio(pago.get_socio()).unwrap().get_categoria() {
-                            CategoriaA => {0},
-                            CategoriaB(_) => {1},
-                            CategoriaC => {2},
-                        };
+                        let i = self.club.get_socio(pago.get_socio()).unwrap().get_categoria().num();
                         cantidades[i] += pago.get_monto();
                     }
                 }

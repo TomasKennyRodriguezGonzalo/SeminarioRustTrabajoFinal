@@ -176,6 +176,7 @@ pub mod trabajo_final {
                 Some(idx) => panic!("Ya existe un socio con el dni {dni}: ({:?})", self.socios[idx]),
                 None => (),
             }
+            categoria.assert_valida();
             let mut valor_pago = self.get_precio(categoria);
             
             let mut socio = Socio {
@@ -307,14 +308,14 @@ pub mod trabajo_final {
     }
 
 
-    #[derive(scale::Decode, scale::Encode, Debug, Clone, Copy)]
+    #[derive(scale::Decode, scale::Encode, Debug, Clone, Copy, PartialEq, Eq)]
     #[cfg_attr(
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
     )]
     pub enum Actividad {
         // Categoría C
-        // SoloGimnasio,
+        Gimnasio,
         // Categoría B (gimnasio + uno de estos deportes)
         Futbol,
         Basquet,
@@ -328,7 +329,7 @@ pub mod trabajo_final {
     }
 
     
-    #[derive(scale::Decode, scale::Encode, Debug, Clone, Copy)]
+    #[derive(scale::Decode, scale::Encode, Debug, Clone, Copy, PartialEq, Eq)]
     #[cfg_attr(
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
@@ -340,6 +341,7 @@ pub mod trabajo_final {
     }
 
     impl Categoria {
+        /// Retorna el Índice de la categoría (0, 1 o 2 para A, B y C respectivamente) 
         pub fn num(&self) -> usize {
             use Categoria::*;
             match self {
@@ -348,9 +350,23 @@ pub mod trabajo_final {
                 CategoriaC => 2,
             }
         }
+        /// Retorna true si un socio de la categoría puede acceder a la actividad dada.
+        pub fn puede_acceder_a(&self, actividad: Actividad) -> bool {
+            use Categoria::*;
+            match self {
+                CategoriaA => true,
+                CategoriaB(act) => actividad == Actividad::Gimnasio || actividad == *act,
+                CategoriaC => actividad == Actividad::Gimnasio
+            }
+        }
+        /// Causa un panic si la infomarción de la categoría es inválida
+        pub fn assert_valida(&self) {
+            use Categoria::*;
+            assert_ne!(self, &CategoriaB(Actividad::Gimnasio), "El gimnasio está disponible para todos los socios; no corresponde a la elección en la categoría B.");
+        }
     }
 
-    #[derive(scale::Decode, scale::Encode, Debug, Clone)]
+    #[derive(scale::Decode, scale::Encode, Debug, Clone, PartialEq, Eq)]
     #[cfg_attr(
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
@@ -376,7 +392,7 @@ pub mod trabajo_final {
         }
     }
 
-    #[derive(scale::Decode, scale::Encode, Debug, Clone, PartialEq)]
+    #[derive(scale::Decode, scale::Encode, Debug, Clone, PartialEq, Eq)]
     #[cfg_attr(
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
@@ -394,27 +410,33 @@ pub mod trabajo_final {
         pub fn get_monto(&self) -> u128 {
             self.monto
         }
+
         /// Retorna id del socio.
         pub fn get_socio(&self) -> u64 {
             self.id_socio
         }
+
         /// Retorna la fecha de vencimiento del pago.
         pub fn get_vencimiento(&self) -> Fecha {
             self.vencimiento
         }
+
         /// Retorna un [Option] con la fecha de pago o None si aun no fue pagado.
         pub fn get_pagado(&self) -> Option<Fecha> {
             self.pagado
         }
+
         /// Retorna true si el pago es con descuento o false en caso contrario.
         pub fn get_es_descuento(&self) -> bool {
             self.es_descuento
         }
+
         /// Retorna true si fue pagado, o false en caso contrario.
         pub fn es_pagado(&self) -> bool {
             self.pagado.is_some()
         }
-        /// Retorna un Option con true si se realizó el pago antes o en la fecha de vencimiento,
+
+        /// Retorna un [Option] con true si se realizó el pago antes o en la fecha de vencimiento,
         /// false en caso contrario, y None si aún no se realizó.
         pub fn es_pagado_a_tiempo(&self) -> Option<bool> {
             // no es mayor = es menor o igual = se pagó en el día de vencimiento o antes
