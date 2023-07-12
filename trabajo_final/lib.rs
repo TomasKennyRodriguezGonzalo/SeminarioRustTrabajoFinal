@@ -50,65 +50,75 @@ pub mod trabajo_final {
                 autorizados: Vec::new(),
             }
         }
-
+        /// Sólo el dueño puede cambiar la política (para evitar que alguien la cierre accidentalmente antes de pasarse de dueño).
+        ///
         #[ink(message)]
         pub fn set_politica_autorizacion(&mut self, usar_la_politica: bool) {
-            /// Sólo el dueño puede cambiar la política (para evitar que alguien la cierre accidentalmente antes de pasarse dueño)
             assert!(self.soy_el_dueño(), "Sólo el dueño puede cambiar la política de autorización.");
             self.politica_autorizacion = usar_la_politica;
         }
         
-        /// Estrictamente si sos el dueño actual
+        /// Estrictamente si sos el dueño actual retorna true, o false en caso contrario.
         #[ink(message)]
         pub fn soy_el_dueño(&self) -> bool {
             self.dueño == Self::env().caller()
         }
 
-        /// Si estás autorizado (con la política abierta, todos están autorizados)
+        /// Si estás autorizado (con la política abierta, todos están autorizados) retorna true, o false en caso contrario.
         #[ink(message)]
         pub fn estoy_autorizado(&self) -> bool {
             !self.politica_autorizacion || self.soy_el_dueño() || self.autorizados.contains(&Self::env().caller())
         }
 
+        /// Cambia el AccountId del dueño actual por el nuevo ingresado por parametro.
         #[ink(message)]
         pub fn cambiar_dueño(&mut self, nuevo_dueño: AccountId) {
             assert!(!self.politica_autorizacion || self.soy_el_dueño(), "No autorizado (no es dueño)");
             self.dueño = nuevo_dueño;
         }
+        
+        /// Retorna el AccountId del dueño actual.
         #[ink(message)]
         pub fn get_dueño(&self) -> AccountId {
             self.dueño
         }
 
+        /// Agrega el AccountId ingresado como parametro al listadp de autorizados.
         #[ink(message)]
         pub fn agregar_autorizado(&mut self, quien: AccountId) {
             assert!(!self.politica_autorizacion || self.soy_el_dueño(), "No autorizado (no es dueño)");
             assert!(!self.autorizados.contains(&quien), "Esa cuenta ya está autorizada");
             self.autorizados.push(quien);
         }
+
+        /// Elimina el AccountId ingresado como parametro al listadp de autorizados.
         #[ink(message)]
         pub fn quitar_autorizado(&mut self, quien: AccountId) {
             assert!(!self.politica_autorizacion || self.soy_el_dueño(), "No autorizado (no es dueño)");
             let i = self.autorizados.iter().position(|&cuenta| cuenta == quien);
             self.autorizados.swap_remove(i.expect("No se encuentra la cuenta autorizada."));
         }
-        
+
+        /// Retorna un vector [Vec] con los AccountId autorizados para operar el contrato.
         #[ink(message)]
         pub fn get_autorizados(&self) -> Vec<AccountId> {
             self.autorizados.clone()
         }
 
+        /// Cambia el nombre del Club por el nombre ingresado por parametro.
         #[ink(message)]
         pub fn cambiar_nombre(&mut self, nuevo_nombre: String) {
             assert!(self.estoy_autorizado(), "No autorizado");
             self.nombre = nuevo_nombre;
         }
 
+        /// Retorna el nombre actual del Club.
         #[ink(message)]
         pub fn get_nombre(&self) -> String {
             self.nombre.clone()
         }
 
+        /// Establece el valor del precio de cada Categoria.
         #[ink(message)]
         pub fn set_precio(&mut self, categoria: Categoria, nuevo_valor: u128) {
             self._set_precio(categoria, nuevo_valor);
@@ -118,6 +128,7 @@ pub mod trabajo_final {
             self.precios[categoria.num()] = nuevo_valor;
         }
 
+        /// Retorna el precio de la categoria seleccionada.
         #[ink(message)]
         pub fn get_precio(&self, categoria: Categoria) -> u128 {
             self._get_precio(categoria)
@@ -126,28 +137,35 @@ pub mod trabajo_final {
             self.precios[categoria.num()]
         }
 
+        /// Establece la cantidad de pagos consecutivos necesarios para acceder a la bonificación de precio. 
         #[ink(message)]
         pub fn set_cantidad_pagos_bonificacion(&mut self, nuevo_valor:u16) {
             assert!(self.estoy_autorizado(), "No autorizado");
             assert!(nuevo_valor > 0);
             self.cantidad_pagos_bonificacion = nuevo_valor;
         }
+
+        /// Retorna la cantidad de pagos consecutivos necesarios para acceder a la bonificación de precio.
         #[ink(message)]
         pub fn get_cantidad_pagos_bonificacion(&self) -> u16 {
             self.cantidad_pagos_bonificacion
         }
 
+        /// Establece el porcentaje de bonificación de descuento por pagos consecutivos.
         #[ink(message)]
         pub fn set_porcentaje_bonificacion_pagos_consecutivos(&mut self, nuevo_valor:u8) {
             assert!(self.estoy_autorizado(), "No autorizado");
             assert!(nuevo_valor > 0 && nuevo_valor < 100);
             self.porcentaje_bonificacion = nuevo_valor;
         }
+
+        /// Retorna el porcentaje de bonificación de descuento por pagos consecutivos.
         #[ink(message)]
         pub fn get_porcentaje_bonificacion_pagos_consecutivos(&self) -> u8 {
             self.porcentaje_bonificacion
         }
 
+        /// Registra un nuevo socio y genera el proximo pago con vencimiento en los proximos 10 dias.
         #[ink(message)]
         pub fn registrar_nuevo_socio(&mut self, dni: u128, nombre: String, categoria:Categoria) {
             self._registrar_nuevo_socio(dni, nombre, categoria);
@@ -181,7 +199,9 @@ pub mod trabajo_final {
             self.socios.push(socio);
         }
 
-        /// Busca un socio y retorna su id
+        /// Busca un socio y retorna un Option con su id en caso de existir en el registro, caso contrario
+        /// retorna None.
+        ///
         fn buscar_socio(&self, dni: u128) -> Option<usize> {
             for (idx, socio) in self.socios.iter().enumerate() {
                 if socio.dni == dni {
@@ -191,13 +211,13 @@ pub mod trabajo_final {
             None
         }
 
-        /// Devuelve el socio con la id dada
+        /// Devuelve el socio con la id dada.
         #[ink(message)]
         pub fn get_socio(&self, id: u64) -> Option<Socio> {
             self.socios.get(id as usize).cloned()
         }
 
-        // Obtiene el último pago del socio dado (que va a ser pendiente)
+        /// Obtiene id del último pago pendiente del socio dado.
         fn buscar_ultimo_pago(&self, id_socio: u64) -> usize {
             // let socio = self.socios.get(id_socio).expect("Id de socio inválido");
             // rev() para buscar el último
@@ -210,6 +230,10 @@ pub mod trabajo_final {
             panic!("Id de socio inválido")
         }
 
+        /// Se registra el pago del dni ingresado solo si el monto ingresado es igual al monto a pagar
+        /// segun la categoria.
+        /// 
+        /// Una vez registrado el pago actual se genera automaticamente el siguiente pago del usuario con su respectivo vencimiento.
         #[ink(message)]
         pub fn realizar_pago(&mut self, dni: u128, monto: u128) {
             self._realizar_pago(dni, monto)
@@ -257,7 +281,7 @@ pub mod trabajo_final {
             self.pagos.push(nuevo_pago);
         }
 
-        // Obtiene todos los pagos de todos los socios o el socio con dni especificado en el Option
+        /// Obtiene en un [Vec] todos los pagos de todos los socios o el socio con dni especificado en el Option.
         #[ink(message)]
         pub fn get_pagos(&self, socio: Option<u128>)-> Vec<Pago>{
             if let Some(dni) = socio {
@@ -274,6 +298,7 @@ pub mod trabajo_final {
         //     self.socios[id as usize].clone()
         // }
 
+        /// Retorna la fecha actual en DD/MM/AAAA.
         #[ink(message)]
         pub fn obtener_fecha_actual(&self) -> Fecha {
             self._obtener_fecha_actual()
@@ -344,12 +369,15 @@ pub mod trabajo_final {
         pagos_a_tiempo_consecutivos: u16,
     }
     impl Socio {
+        /// Retorna el DNI del socio.
         pub fn get_dni(&self) -> u128 {
             self.dni
         }
+        /// Retorna el Nombre del socio.
         pub fn get_nombre(&self) -> &str {
             &self.nombre
         }
+        /// Retorna la categoria seleccionada por el Socio.
         pub fn get_categoria(&self) -> Categoria {
             self.categoria
         }
@@ -369,30 +397,37 @@ pub mod trabajo_final {
     }
 
     impl Pago {
+        /// Retorna el monto a pagar.
         pub fn get_monto(&self) -> u128 {
             self.monto
         }
+        /// Retorna id del socio.
         pub fn get_socio(&self) -> u64 {
             self.id_socio
         }
+        /// Retorna la fecha de vencimiento del pago.
         pub fn get_vencimiento(&self) -> Fecha {
             self.vencimiento
         }
+        /// Retorna un [Option] con la fecha de pago o None si aun no fue pagado.
         pub fn get_pagado(&self) -> Option<Fecha> {
             self.pagado
         }
+        /// Retorna true si el pago es con descuento o false en caso contrario.
         pub fn get_es_descuento(&self) -> bool {
             self.es_descuento
         }
+        /// Retorna true si fue pagado, o false en caso contrario.
         pub fn es_pagado(&self) -> bool {
             self.pagado.is_some()
         }
+        /// Retorna true si se realizo el pago antes o en la fecha de vencimiento, o false en caso contrario.
         pub fn es_pagado_a_tiempo(&self) -> Option<bool> {
             // no es mayor = es menor o igual = se pagó en el día de vencimiento o antes
             self.pagado.map(|fecha_pagado| !fecha_pagado.es_mayor(&self.vencimiento))
         }
 
-        // se interpreta moroso como que actualmente no está pago y pasó la fecha.
+        /// Se interpreta moroso cuando a la fecha ingresada no está pago y se pasó la fecha de vencimiento.
         pub fn es_moroso(&self, fecha_actual: Fecha) -> bool {
             if self.es_pagado() {return false;}
             !fecha_actual.es_mayor(&self.vencimiento)
