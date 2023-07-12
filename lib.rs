@@ -4,7 +4,7 @@ mod trabajo_final_reporte {
     use ink::prelude::string::String;
     use ink::prelude::collections::HashSet;
     use trabajo_final::ClubRef;
-    use trabajo_final::trabajo_final::Socio;
+    use trabajo_final::trabajo_final::{Socio, Categoria::*};
 
     #[ink(storage)]
     pub struct TrabajoFinalReporte {
@@ -41,6 +41,27 @@ mod trabajo_final_reporte {
                 }
             }
             socios_morosos.iter().map(|&id| self.club.get_socio(id).unwrap()).collect()
+        }
+
+        #[ink(message)]
+        pub fn informe_recaudacion(&self) -> Vec<(String, u128)> {
+            let pagos = self.club.get_pagos(None);
+            let mut cantidades = [0; 3];
+            for pago in pagos {
+                if pago.es_pagado() {
+                    let i = match self.club.get_socio(pago.get_socio()).unwrap().get_categoria() {
+                        CategoriaA => {0},
+                        CategoriaB(_) => {1},
+                        CategoriaC => {2},
+                    };
+                    cantidades[i] += pago.get_monto();
+                }
+            }
+            vec![
+                ("Categoría A".into(), cantidades[0]),
+                ("Categoría B".into(), cantidades[1]),
+                ("Categoría C".into(), cantidades[2]),
+            ]
         }
     }
 }
