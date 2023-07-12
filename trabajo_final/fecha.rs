@@ -30,6 +30,7 @@ impl Fecha {
             Err(())
         }
     }
+
     /// Retorna el dia de la fecha.
     /// 
     /// Ejemplo
@@ -41,6 +42,7 @@ impl Fecha {
     pub fn get_dia(&self) -> i8 {
         self.dia
     }
+
     /// Retorna el mes de la fecha.
     /// 
     /// Ejemplo
@@ -52,6 +54,7 @@ impl Fecha {
     pub fn get_mes(&self) -> i8 {
         self.mes
     }
+
     /// Retorna el año de la fecha.
     /// 
     /// Ejemplo
@@ -63,6 +66,7 @@ impl Fecha {
     pub fn get_año(&self) -> i32 {
         self.año
     }
+
     /// Determina si una fecha es valida dentro de los dias y meses del año, retornando true de ser valida
     /// o false en caso contrario.
     fn es_fecha_valida(&self) -> bool {
@@ -70,6 +74,7 @@ impl Fecha {
         self.mes >= 1 && self.mes <= 12 &&
         self.dia >= 1 && self.dia <= self.ultimo_dia_mes()
     }
+
     /// Determina si el año de la fecha es bisiesto, retornando *true* si es bisiesto o 
     /// *false* en caso contrario.
     /// 
@@ -115,10 +120,12 @@ impl Fecha {
             }
         }
     }
+    
     /// Retorna los dias restantes hasta fin de mes.
     fn dias_hasta_fin_de_mes(&self) -> i8 {
         self.ultimo_dia_mes() - self.dia
     }
+
     /// Suma a la fecha los dias ingresados como parametro.
     /// 
     /// Ejemplo
@@ -127,6 +134,7 @@ impl Fecha {
     /// use trabajo_final::fecha::Fecha;
     /// let mut f = Fecha{dia:10,mes:10,año:2021};
     /// f.sumar_dias(10);
+    /// assert_eq!(f.get_dia(), 20);
     /// ```
     /// 
     pub fn sumar_dias(&mut self, mut dias: i32) {
@@ -147,6 +155,7 @@ impl Fecha {
         // Ahora el día final está en este mes
         self.dia += dias as i8;
     }
+
     /// Resta a la fecha los dias ingresados como parametro.
     /// 
     /// Ejemplo
@@ -155,6 +164,8 @@ impl Fecha {
     /// use trabajo_final::fecha::Fecha;
     /// let mut f = Fecha{dia:10,mes:10,año:2021};
     /// f.restar_dias(10);
+    /// assert_eq!(f.get_mes(), 9);
+    /// assert_eq!(f.get_dia(), 30);
     /// ```
     ///
     pub fn restar_dias(&mut self, mut dias: i32) {
@@ -175,6 +186,7 @@ impl Fecha {
         // Ahora el día final está en este mes
         self.dia -= dias as i8;
     }
+    
     /// Determina si la fecha actual es mayor a la ingresada por parametro.
     /// 
     /// Ejemplo
