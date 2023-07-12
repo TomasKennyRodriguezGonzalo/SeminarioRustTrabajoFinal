@@ -43,7 +43,7 @@ mod trabajo_final_reporte {
             socios_morosos.iter().map(|&id| self.club.get_socio(id).unwrap()).collect()
         }
 
-        // Recaudación en los últimos 30 días
+        // Recaudación durante el mes pedido
         #[ink(message)]
         pub fn informe_recaudacion(&self, año: i32, mes: i8) -> Vec<(String, u128)> {
             let pagos = self.club.get_pagos(None);
