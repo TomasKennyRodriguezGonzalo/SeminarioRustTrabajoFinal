@@ -10,6 +10,17 @@ pub struct Fecha {
 }
 
 impl Fecha {
+    /// Construye una fecha valida, caso contrario retorna Err().
+    /// 
+    /// Ejemplo
+    /// 
+    /// ```
+    ///use trabajo_final::fecha::Fecha;
+    ///let f = Fecha::new(10,13,2021);
+    ///assert!(f.is_err());
+    ///assert!(Fecha::new(10,12,2041).is_ok());
+    ///assert!(Fecha::new(1,12,-2051).is_ok());
+    ///```
     // No se permite construir fechas inválidas
     pub fn new(dia: i8, mes: i8, año: i32) -> Result<Fecha, ()> {
         let fecha_tentativa = Fecha {dia, mes, año};
@@ -19,23 +30,60 @@ impl Fecha {
             Err(())
         }
     }
-
+    /// Retorna el dia de la fecha.
+    /// 
+    /// Ejemplo
+    /// ```
+    /// use trabajo_final::fecha::Fecha;
+    /// let f = Fecha{dia:10,mes:10,año:2021};
+    /// assert_eq!(f.get_dia(),10);
+    /// ```
     pub fn get_dia(&self) -> i8 {
         self.dia
     }
+    /// Retorna el mes de la fecha.
+    /// 
+    /// Ejemplo
+    /// ```
+    /// use trabajo_final::fecha::Fecha;
+    /// let f = Fecha{dia:10,mes:10,año:2021};
+    /// assert_eq!(f.get_mes(),10);
+    /// ```
     pub fn get_mes(&self) -> i8 {
         self.mes
     }
+    /// Retorna el año de la fecha.
+    /// 
+    /// Ejemplo
+    /// ```
+    /// use trabajo_final::fecha::Fecha;
+    /// let f = Fecha{dia:10,mes:10,año:2021};
+    /// assert_eq!(f.get_año(),2021);
+    /// ```
     pub fn get_año(&self) -> i32 {
         self.año
     }
-
+    /// Determina si una fecha es valida dentro de los dias y meses del año, retornando true de ser valida
+    /// o false en caso contrario.
     fn es_fecha_valida(&self) -> bool {
         // todos los años son válidos
         self.mes >= 1 && self.mes <= 12 &&
         self.dia >= 1 && self.dia <= self.ultimo_dia_mes()
     }
-
+    /// Determina si el año de la fecha es bisiesto, retornando *true* si es bisiesto o 
+    /// *false* en caso contrario.
+    /// 
+    /// Ejemplo
+    /// 
+    /// ```
+    /// use trabajo_final::fecha::Fecha;
+    /// let f = Fecha{dia:10,mes:10,año:2021};
+    /// assert!(!f.es_bisiesto());
+    /// let f2 = Fecha{dia:10,mes:1,año:2020};
+    /// assert!(f2.es_bisiesto());
+    /// let f3 = Fecha{dia:2,mes:10,año:2024};
+    /// assert!(f3.es_bisiesto());
+    /// ```
     pub fn es_bisiesto(&self) -> bool {
         if self.año % 4 == 0 { // Tal vez bisiesto, a no ser...
             if self.año % 100 == 0 { // Ahora no, excepto que...
@@ -49,7 +97,7 @@ impl Fecha {
         false
     }
 
-    // Retorna el último día del mes actual.
+    /// Retorna el último día del mes actual.
     fn ultimo_dia_mes(&self) -> i8 {
         // 31, 2X, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
         match self.mes {
@@ -67,11 +115,20 @@ impl Fecha {
             }
         }
     }
-
+    /// Retorna los dias restantes hasta fin de mes.
     fn dias_hasta_fin_de_mes(&self) -> i8 {
         self.ultimo_dia_mes() - self.dia
     }
-
+    /// Suma a la fecha los dias ingresados como parametro.
+    /// 
+    /// Ejemplo
+    /// 
+    /// ```
+    /// use trabajo_final::fecha::Fecha;
+    /// let mut f = Fecha{dia:10,mes:10,año:2021};
+    /// f.sumar_dias(10);
+    /// ```
+    /// 
     pub fn sumar_dias(&mut self, mut dias: i32) {
         if dias < 0 { // No es la idea, pero no cuesta nada permitirlo
             self.restar_dias(-dias);
@@ -90,6 +147,16 @@ impl Fecha {
         // Ahora el día final está en este mes
         self.dia += dias as i8;
     }
+    /// Resta a la fecha los dias ingresados como parametro.
+    /// 
+    /// Ejemplo
+    /// 
+    /// ```
+    /// use trabajo_final::fecha::Fecha;
+    /// let mut f = Fecha{dia:10,mes:10,año:2021};
+    /// f.restar_dias(10);
+    /// ```
+    ///
     pub fn restar_dias(&mut self, mut dias: i32) {
         if dias < 0 {
             self.sumar_dias(-dias);
@@ -108,7 +175,17 @@ impl Fecha {
         // Ahora el día final está en este mes
         self.dia -= dias as i8;
     }
-
+    /// Determina si la fecha actual es mayor a la ingresada por parametro.
+    /// 
+    /// Ejemplo
+    /// ```
+    /// use trabajo_final::fecha::Fecha;
+    /// let f = Fecha{dia:10,mes:10,año:2021};
+    /// let f_menor = Fecha{dia:12,mes:4,año:2000};
+    /// let f_mayor = Fecha{dia:8,mes:9,año:2023};
+    /// assert!(f.es_mayor(&f_menor));
+    /// assert!(!f.es_mayor(&f_mayor));
+    /// ```
     pub fn es_mayor(&self, otra: &Self) -> bool {
         if self.año > otra.año {return true}
         if self.año < otra.año {return false}
@@ -117,6 +194,7 @@ impl Fecha {
         if self.dia > otra.dia {return true}
         false
     }
+    /// Retorna true si la fecha actual es igual a la ingresada como parametro, falso en caso contrario.
     pub fn igual_que(&self, otra: &Self) -> bool {
         self.año == otra.año && self.mes == otra.mes && self.dia == otra.dia
     }
