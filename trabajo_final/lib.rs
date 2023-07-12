@@ -165,6 +165,23 @@ pub mod trabajo_final {
             self.porcentaje_bonificacion
         }
 
+        /// Retorna un [Vec] con todos los [Socio]s registrados.
+        #[ink(message)]
+        pub fn get_socios(&self) -> Vec<Socio> {
+            self.socios.clone()
+        }
+        
+        /// Obtiene en un [Vec] todos los pagos de todos los socios o el socio con dni especificado en el Option.
+        #[ink(message)]
+        pub fn get_pagos(&self, socio: Option<u128>)-> Vec<Pago>{
+            if let Some(dni) = socio {
+                let id = self.buscar_socio(dni).expect("No existe socio con dni {dni}") as u64;
+                self.pagos.iter().filter(|&p| p.id_socio == id).map(|p| p.clone()).collect()
+            } else {
+                self.pagos.clone()
+            }
+        }
+
         /// Registra un nuevo socio y genera el proximo pago con vencimiento en los proximos 10 dias.
         #[ink(message)]
         pub fn registrar_nuevo_socio(&mut self, dni: u128, nombre: String, categoria:Categoria) {
@@ -278,17 +295,6 @@ pub mod trabajo_final {
             }
 
             self.pagos.push(nuevo_pago);
-        }
-
-        /// Obtiene en un [Vec] todos los pagos de todos los socios o el socio con dni especificado en el Option.
-        #[ink(message)]
-        pub fn get_pagos(&self, socio: Option<u128>)-> Vec<Pago>{
-            if let Some(dni) = socio {
-                let id = self.buscar_socio(dni).expect("No existe socio con dni {dni}") as u64;
-                self.pagos.iter().filter(|&p| p.id_socio == id).map(|p| p.clone()).collect()
-            } else {
-                self.pagos.clone()
-            }
         }
 
         /// Retorna la fecha actual en un Struct con año, mes y día.

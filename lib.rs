@@ -4,7 +4,7 @@ mod trabajo_final_reporte {
     use ink::prelude::string::String;
     use ink::prelude::collections::HashSet;
     use trabajo_final::ClubRef;
-    use trabajo_final::trabajo_final::{Socio, Categoria::*};
+    use trabajo_final::trabajo_final::{Socio, Categoria::*, Actividad};
 
     #[ink(storage)]
     pub struct TrabajoFinalReporte {
@@ -29,6 +29,7 @@ mod trabajo_final_reporte {
             self.club.get_nombre()
         }
 
+        /// Devuelve un [Vec] con todos los socios morosos del club.
         #[ink(message)]
         pub fn obtener_socios_morosos(&self) -> Vec<Socio> {
             // socios guardados por id
@@ -43,7 +44,7 @@ mod trabajo_final_reporte {
             socios_morosos.iter().map(|&id| self.club.get_socio(id).unwrap()).collect()
         }
 
-        // Recaudación durante el mes pedido
+        // Devuelve la recaudación total de pagos realizados durante el mes pedido.
         #[ink(message)]
         pub fn informe_recaudacion(&self, año: i32, mes: i8) -> Vec<(String, u128)> {
             let pagos = self.club.get_pagos(None);
@@ -61,6 +62,31 @@ mod trabajo_final_reporte {
                 ("Categoría B".into(), cantidades[1]),
                 ("Categoría C".into(), cantidades[2]),
             ]
+        }
+
+        /// Devuelve un [Vec] con todos los socios no morosos que tienen permitido acceder a la [Actividad] dada.
+        #[ink(message)]
+        pub fn socios_no_morosos_en_actividad(&self, actividad: Actividad) -> Vec<Socio> {
+            // socios guardados por id
+            let mut socios_morosos: HashSet<u64> = HashSet::new();
+            let mut socios_no_morosos: HashSet<u64> = HashSet::new();
+            let pagos = self.club.get_pagos(None);
+            let fecha_actual = self.club.obtener_fecha_actual();
+            for pago in pagos {
+                let id_socio = pago.get_socio();
+                if pago.es_moroso(fecha_actual) {
+                    socios_morosos.insert(id_socio);
+                    socios_no_morosos.remove(&id_socio);
+                } else {
+                    if !socios_morosos.contains(&id_socio) {
+                        socios_no_morosos.insert(id_socio);
+                    }
+                }
+            }
+            socios_no_morosos.iter()
+                .map(|&id| self.club.get_socio(id).unwrap())
+                .filter(|s| s.get_categoria().puede_acceder_a(actividad))
+                .collect()
         }
     }
 }
