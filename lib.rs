@@ -45,15 +45,12 @@ mod trabajo_final_reporte {
 
         // Recaudación en los últimos 30 días
         #[ink(message)]
-        pub fn informe_recaudacion(&self) -> Vec<(String, u128)> {
+        pub fn informe_recaudacion(&self, año: i32, mes: i8) -> Vec<(String, u128)> {
             let pagos = self.club.get_pagos(None);
-            // los pagos de limite_mes para atrás no se cuentan
-            let mut limite_mes = self.club.obtener_fecha_actual();
-            limite_mes.restar_dias(30);
             let mut cantidades = [0; 3];
             for pago in pagos {
                 if let Some(fecha_pagado) = pago.get_pagado() {
-                    if fecha_pagado.es_mayor(&limite_mes) {
+                    if fecha_pagado.get_año() == año && fecha_pagado.get_mes() == mes {
                         let i = match self.club.get_socio(pago.get_socio()).unwrap().get_categoria() {
                             CategoriaA => {0},
                             CategoriaB(_) => {1},
