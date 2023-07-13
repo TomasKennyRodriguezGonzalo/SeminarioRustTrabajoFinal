@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 #![allow(unused)]
 pub use self::trabajo_final::ClubRef;
-mod fecha;
+pub mod fecha;
 #[ink::contract]
 pub mod trabajo_final {   
     
@@ -14,8 +14,9 @@ pub mod trabajo_final {
         id_socio, en cualquier contexto, es el índice del socio en el vector de socios (empieza en 0)
     */
 
+
     #[ink(storage)]    
-    #[derive(Clone)]
+    #[derive(scale::Encode, Clone)]
     pub struct Club {
         nombre: String,
         pagos: Vec<Pago>,
@@ -30,6 +31,8 @@ pub mod trabajo_final {
         politica_autorizacion: bool,
         dueño: AccountId,
         autorizados: Vec<AccountId>,
+        // Para poder hacer los tests del contrato es necesario poder cambiar la fecha actual.
+        fecha_actual_override: Option<Fecha>,
     }
 
     impl Club {
@@ -43,11 +46,12 @@ pub mod trabajo_final {
                 pagos : Vec::new(),
                 socios: Vec::new(),
                 precios: [5000, 3000, 2000],
-                cantidad_pagos_bonificacion:5,
+                cantidad_pagos_bonificacion: 5,
                 porcentaje_bonificacion: 10,
                 politica_autorizacion: true,
                 dueño,
                 autorizados: Vec::new(),
+                fecha_actual_override: None,
             }
         }
 
@@ -153,7 +157,7 @@ pub mod trabajo_final {
 
         /// Establece el porcentaje de bonificación de descuento por pagos consecutivos.
         #[ink(message)]
-        pub fn set_porcentaje_bonificacion_pagos_consecutivos(&mut self, nuevo_valor:u8) {
+        pub fn set_porcentaje_bonificacion_pagos_consecutivos(&mut self, nuevo_valor: u8) {
             assert!(self.estoy_autorizado(), "No autorizado");
             assert!(nuevo_valor > 0 && nuevo_valor < 100);
             self.porcentaje_bonificacion = nuevo_valor;
@@ -305,12 +309,24 @@ pub mod trabajo_final {
 
         // self.env().block_timestamp(): tiempo en milisengundos desde 01/01/1970
         fn _obtener_fecha_actual(&self) -> Fecha {
+            if let Some(fecha) = self.fecha_actual_override {
+                return fecha;
+            }
             let milisegundos_desde_epoch = self.env().block_timestamp();
             let dias_desde_epoch = milisegundos_desde_epoch / 1000 / 60 / 60 / 24;
             let mut fecha = Fecha::new(1, 1, 1970).unwrap();
             fecha.sumar_dias(dias_desde_epoch as i32);
             fecha
         }
+
+        #[ink(message)]
+        pub fn set_fecha_actual_override(&mut self, fecha: Option<Fecha>) {
+            self.fecha_actual_override = fecha;
+        }
+        #[ink(message)]
+        pub fn get_fecha_actual_override(&self) -> Option<Fecha> {
+            self.fecha_actual_override
+        } 
     }
 
 
@@ -452,7 +468,7 @@ pub mod trabajo_final {
         /// Devuelve true si, a la fecha ingresada, el pago está pendiente y ya pasó la fecha de vencimiento.
         pub fn es_moroso(&self, fecha_actual: Fecha) -> bool {
             if self.es_pagado() {return false;}
-            !fecha_actual.es_mayor(&self.vencimiento)
+            fecha_actual.es_mayor(&self.vencimiento)
         }
     }
 }
@@ -527,6 +543,13 @@ mod tests {
         let mut club = generar_club();
         club.registrar_nuevo_socio(0, "".into(), Categoria::CategoriaA);
         club.registrar_nuevo_socio(0, "".into(), Categoria::CategoriaA);
+    }
+
+    #[should_panic]
+    #[ink::test]
+    fn registrar_socio_categoria_invalida_test() {
+        let mut club = generar_club();
+        club.registrar_nuevo_socio(0, "".into(), Categoria::CategoriaB(Actividad::Gimnasio));
     }
 
     #[ink::test]

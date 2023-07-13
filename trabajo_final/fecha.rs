@@ -36,7 +36,7 @@ impl Fecha {
     /// Ejemplo
     /// ```
     /// use trabajo_final::fecha::Fecha;
-    /// let f = Fecha{dia:10,mes:10,año:2021};
+    /// let f = Fecha::new(10, 10, 2021).unwrap();
     /// assert_eq!(f.get_dia(),10);
     /// ```
     pub fn get_dia(&self) -> i8 {
@@ -48,7 +48,7 @@ impl Fecha {
     /// Ejemplo
     /// ```
     /// use trabajo_final::fecha::Fecha;
-    /// let f = Fecha{dia:10,mes:10,año:2021};
+    /// let f = Fecha::new(10, 10, 2021).unwrap();
     /// assert_eq!(f.get_mes(),10);
     /// ```
     pub fn get_mes(&self) -> i8 {
@@ -60,7 +60,7 @@ impl Fecha {
     /// Ejemplo
     /// ```
     /// use trabajo_final::fecha::Fecha;
-    /// let f = Fecha{dia:10,mes:10,año:2021};
+    /// let f = Fecha::new(10, 10, 2021).unwrap();
     /// assert_eq!(f.get_año(),2021);
     /// ```
     pub fn get_año(&self) -> i32 {
@@ -82,11 +82,11 @@ impl Fecha {
     /// 
     /// ```
     /// use trabajo_final::fecha::Fecha;
-    /// let f = Fecha{dia:10,mes:10,año:2021};
+    /// let f = Fecha::new(10, 10, 2021).unwrap();
     /// assert!(!f.es_bisiesto());
-    /// let f2 = Fecha{dia:10,mes:1,año:2020};
+    /// let f2 = Fecha::new(10, 1, 2020).unwrap();
     /// assert!(f2.es_bisiesto());
-    /// let f3 = Fecha{dia:2,mes:10,año:2024};
+    /// let f3 = Fecha::new(2, 10, 2024).unwrap();
     /// assert!(f3.es_bisiesto());
     /// ```
     pub fn es_bisiesto(&self) -> bool {
@@ -132,7 +132,7 @@ impl Fecha {
     /// 
     /// ```
     /// use trabajo_final::fecha::Fecha;
-    /// let mut f = Fecha{dia:10,mes:10,año:2021};
+    /// let mut f = Fecha::new(10, 10, 2021).unwrap();
     /// f.sumar_dias(10);
     /// assert_eq!(f.get_dia(), 20);
     /// ```
@@ -162,7 +162,7 @@ impl Fecha {
     /// 
     /// ```
     /// use trabajo_final::fecha::Fecha;
-    /// let mut f = Fecha{dia:10,mes:10,año:2021};
+    /// let mut f = Fecha::new(10, 10, 2021).unwrap();
     /// f.restar_dias(10);
     /// assert_eq!(f.get_mes(), 9);
     /// assert_eq!(f.get_dia(), 30);
@@ -192,9 +192,9 @@ impl Fecha {
     /// Ejemplo
     /// ```
     /// use trabajo_final::fecha::Fecha;
-    /// let f = Fecha{dia:10,mes:10,año:2021};
-    /// let f_menor = Fecha{dia:12,mes:4,año:2000};
-    /// let f_mayor = Fecha{dia:8,mes:9,año:2023};
+    /// let f = Fecha::new(10,10,2021).unwrap();
+    /// let f_menor = Fecha::new(12,4,2000).unwrap();
+    /// let f_mayor = Fecha::new(8,9,2023).unwrap();
     /// assert!(f.es_mayor(&f_menor));
     /// assert!(!f.es_mayor(&f_mayor));
     /// ```
