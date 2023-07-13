@@ -18,24 +18,33 @@ pub mod trabajo_final {
     #[ink(storage)]    
     #[derive(scale::Encode, Clone)]
     pub struct Club {
+        /// Nombre del club.
         nombre: String,
+        /// Pagos registrados en el club, ya sea pagados o pendientes.
         pagos: Vec<Pago>,
+        /// Socios del club.
         socios: Vec<Socio>,
-        // Precio de cada categoría, en tokens por mes
+        /// Precio de cada categoría, en tokens por mes
         precios: [u128; 3],
+        /// Cantidad de pagos no morosos consecutivos necesarios para conseguir el descuento.
         // 65535 meses suena como un máximo razonable...
         cantidad_pagos_bonificacion: u16,
+        /// Porcentaje del descuento por pagos no morosos consecutivos.
         // el máximo es 100, así que con u8 sobra
         porcentaje_bonificacion: u8,
+        
         // permisos, etc.
+        /// Si es true, se utiliza la política "cerrada" donde sólo los usuarios autorizados pueden realizar cambios.
+        /// Si es false, la política es "abierta" y todos los usuarios pueden realizar la mayoría de operaciones (excepto cerrar la política).
         politica_autorizacion: bool,
+        /// La cuenta que se considera dueña del club.
         dueño: AccountId,
+        /// Las cuentas autorizadas a realizar cambios con la política cerrada.
         autorizados: Vec<AccountId>,
-        // Para poder hacer los tests del contrato es necesario poder cambiar la fecha actual.
-        fecha_actual_override: Option<Fecha>,
     }
 
     impl Club {
+        /// Crea un nuevo club, con el dueño dado.
         #[ink(constructor)]
         pub fn new(dueño: AccountId) -> Self {
             Self::_new(dueño)
@@ -51,24 +60,25 @@ pub mod trabajo_final {
                 politica_autorizacion: true,
                 dueño,
                 autorizados: Vec::new(),
-                fecha_actual_override: None,
             }
         }
 
-        /// Sólo el dueño puede cambiar la política (para evitar que alguien la cierre accidentalmente antes de pasarse de dueño).
+        /// Cambia la política de autorización a cerrada (true) o abierta (false).
+        /// 
+        /// Sólo el dueño puede cambiar la política, para evitar que alguien la cierre accidentalmente antes de pasarse el dueño.
         #[ink(message)]
         pub fn set_politica_autorizacion(&mut self, usar_la_politica: bool) {
             assert!(self.soy_el_dueño(), "Sólo el dueño puede cambiar la política de autorización.");
             self.politica_autorizacion = usar_la_politica;
         }
         
-        /// Estrictamente si sos el dueño actual retorna true, o false en caso contrario.
+        /// Retorna true si la cuenta actual es dueña del club, o false en caso contrario.
         #[ink(message)]
         pub fn soy_el_dueño(&self) -> bool {
             self.dueño == Self::env().caller()
         }
 
-        /// Si estás autorizado (con la política abierta, todos están autorizados) retorna true, o false en caso contrario.
+        /// Retorna true si la cuenta actual está autorizada (con la política abierta, todos están autorizados), o false en caso contrario.
         #[ink(message)]
         pub fn estoy_autorizado(&self) -> bool {
             !self.politica_autorizacion || self.soy_el_dueño() || self.autorizados.contains(&Self::env().caller())
@@ -309,24 +319,12 @@ pub mod trabajo_final {
 
         // self.env().block_timestamp(): tiempo en milisengundos desde 01/01/1970
         fn _obtener_fecha_actual(&self) -> Fecha {
-            if let Some(fecha) = self.fecha_actual_override {
-                return fecha;
-            }
             let milisegundos_desde_epoch = self.env().block_timestamp();
             let dias_desde_epoch = milisegundos_desde_epoch / 1000 / 60 / 60 / 24;
             let mut fecha = Fecha::new(1, 1, 1970).unwrap();
             fecha.sumar_dias(dias_desde_epoch as i32);
             fecha
         }
-
-        #[ink(message)]
-        pub fn set_fecha_actual_override(&mut self, fecha: Option<Fecha>) {
-            self.fecha_actual_override = fecha;
-        }
-        #[ink(message)]
-        pub fn get_fecha_actual_override(&self) -> Option<Fecha> {
-            self.fecha_actual_override
-        } 
     }
 
 
@@ -356,6 +354,8 @@ pub mod trabajo_final {
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
     )]
+    /// Las tres categorías posibles para un Socio.
+    /// La Categoría B contiene además la actividad deportiva elegida por el socio al registrarse.
     pub enum Categoria{
         CategoriaA,
         CategoriaB(Actividad),
@@ -393,7 +393,10 @@ pub mod trabajo_final {
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
     )]
-    pub struct Socio{
+    /// Información sobre un socio del club
+    /// Contiene el dni, nombre, la categoría elegida (incluida la actividad si elegió la B),
+    /// y la cantidad de meses consecutivos que el socio lleva pagando a tiempo, la cual vuelve a 0 al conseguir el descuento. 
+    pub struct Socio {
         dni:u128,
         nombre: String,
         categoria: Categoria,
@@ -404,11 +407,11 @@ pub mod trabajo_final {
         pub fn get_dni(&self) -> u128 {
             self.dni
         }
-        /// Retorna el Nombre del socio.
+        /// Retorna el nombre del socio.
         pub fn get_nombre(&self) -> &str {
             &self.nombre
         }
-        /// Retorna la categoria seleccionada por el Socio.
+        /// Retorna la categoria seleccionada por el socio.
         pub fn get_categoria(&self) -> Categoria {
             self.categoria
         }
@@ -419,6 +422,7 @@ pub mod trabajo_final {
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
     )]
+    /// Información sobre un pago de una membresía al club.
     pub struct Pago {
         id_socio: u64,
         monto: u128,

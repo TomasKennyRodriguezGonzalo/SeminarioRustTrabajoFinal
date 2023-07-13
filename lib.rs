@@ -66,12 +66,13 @@ mod trabajo_final_reporte {
             socios_morosos.iter().map(|&id| self.club.get_socio(id).unwrap()).collect()
         }
 
-        // Devuelve la recaudación total de pagos realizados durante el mes pedido.
+        /// Devuelve la recaudación total de pagos realizados durante el mes pedido, para cada categoría, así también como el total.
+        /// el formato es [Categoria A, Categoria B, Categoria C, Total]
         #[ink(message)]
-        pub fn informe_recaudacion(&self, año: i32, mes: i8) -> [(String, u128); 3] {
+        pub fn informe_recaudacion(&self, año: i32, mes: i8) -> [u128; 4] {
             assert!(mes >= 1 && mes <= 12, "Mes inválido");
             let pagos = self.club.get_pagos(None);
-            let mut cantidades = [0; 3];
+            let mut cantidades = [0; 4];
             for pago in pagos {
                 if let Some(fecha_pagado) = pago.get_pagado() {
                     if fecha_pagado.get_año() == año && fecha_pagado.get_mes() == mes {
@@ -80,11 +81,8 @@ mod trabajo_final_reporte {
                     }
                 }
             }
-            [
-                ("Categoría A".into(), cantidades[0]),
-                ("Categoría B".into(), cantidades[1]),
-                ("Categoría C".into(), cantidades[2]),
-            ]
+            cantidades[3] = cantidades[0] + cantidades[1] + cantidades[2];
+            cantidades
         }
 
         /// Devuelve un [Vec] con todos los socios no morosos que tienen permitido acceder a la [Actividad] dada.
@@ -223,12 +221,8 @@ mod tests {
         assert!(morosos.contains(&2));
     }
 
-    fn recaudacion(cat_a: u128, cat_b: u128, cat_c: u128) -> [(String, u128); 3] {
-        [
-            ("Categoría A".into(), cat_a),
-            ("Categoría B".into(), cat_b),
-            ("Categoría C".into(), cat_c),
-        ]
+    fn recaudacion(cat_a: u128, cat_b: u128, cat_c: u128) -> [u128; 4] {
+        [ cat_a, cat_b, cat_c, cat_a + cat_b + cat_c ]
     }
     #[ink::test]
     fn informe_recaudacion_test() {
