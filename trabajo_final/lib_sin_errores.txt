@@ -1,0 +1,314 @@
+/*
+    NOTA:
+    a pesar del [cfg(test)], las cosas relacionadas a los test generan error al hacer cargo contract build.
+    lib_sin_errores.txt tiene el contenido de este archivo pero con las cosas que causan errores comentadas
+    para poder hacer el cargo contract build
+ */
+#![cfg_attr(not(feature = "std"), no_std, no_main)]
+#[ink::contract]
+mod trabajo_final_reporte {
+    use ink::prelude::string::String;
+    use ink::prelude::vec::Vec;
+    use trabajo_final::ClubRef;
+    use trabajo_final::trabajo_final::{Club, Socio, Actividad, Categoria, Pago};
+    use trabajo_final::fecha::Fecha;
+
+    /// Genera un reporte sobre un Club
+    #[ink(storage)]
+    pub struct TrabajoFinalReporte {
+        // #[cfg(not(test))]
+        club: ClubRef,
+        // #[cfg(test)]
+        // club: ClubFalso,
+    }
+    impl TrabajoFinalReporte {
+        /// Crea un nuevo contrato de Reporte, que apunta al Club dado
+        #[cfg(not(test))]
+        #[ink(constructor)]
+        pub fn new(club: ClubRef) -> Self {
+            Self { club }
+        }
+
+        // #[cfg(test)]
+        // pub fn new(club: ClubFalso) -> Self {
+        //     Self { club }
+        // }
+        // #[cfg(test)]
+        // pub fn club(&mut self) -> &mut ClubFalso {
+        //     &mut self.club
+        // }
+
+        #[cfg(not(test))]
+        #[ink(message)]
+        pub fn get_club(&self) -> ClubRef {
+            self.club.clone()
+        } 
+
+        /// Cambia el club sobre el cual el contrato hace sus reportes.
+        #[cfg(not(test))]
+        #[ink(message)]
+        pub fn cambiar_club(&mut self, nuevo_club: ClubRef) {
+            self.club = nuevo_club;
+        }
+
+        /// Test simple para ver que funcione la comunicación con el contrato.
+        #[ink(message)]
+        pub fn obtener_nombre(&self) -> String {
+            self.club.get_nombre()
+        }
+
+        /// Devuelve un [Vec] con todos los socios morosos del club.
+        #[ink(message)]
+        pub fn obtener_socios_morosos(&self) -> Vec<Socio> {
+            // socios guardados por id
+            let mut socios_morosos: Vec<u64> = Vec::new();
+            let pagos = self.club.get_pagos(None);
+            let fecha_actual = self.club.obtener_fecha_actual();
+            for pago in pagos {
+                if pago.es_moroso(fecha_actual) {
+                    socios_morosos.push(pago.get_socio());
+                }
+            }
+            // Quitar los socios que se agregaron varias veces
+            socios_morosos.sort();
+            socios_morosos.dedup();
+
+            socios_morosos.iter().map(|&id| self.club.get_socio(id).unwrap()).collect()
+        }
+
+        /// Devuelve la recaudación total de pagos realizados durante el mes pedido, para cada categoría, así también como el total.
+        /// el formato es [Categoria A, Categoria B, Categoria C, Total]
+        #[ink(message)]
+        pub fn informe_recaudacion(&self, año: i32, mes: i8) -> [u128; 4] {
+            assert!(mes >= 1 && mes <= 12, "Mes inválido");
+            let pagos = self.club.get_pagos(None);
+            let mut cantidades = [0; 4];
+            for pago in pagos {
+                if let Some(fecha_pagado) = pago.get_pagado() {
+                    if fecha_pagado.get_año() == año && fecha_pagado.get_mes() == mes {
+                        let i = self.club.get_socio(pago.get_socio()).unwrap().get_categoria().num();
+                        cantidades[i] += pago.get_monto();
+                    }
+                }
+            }
+            cantidades[3] = cantidades[0] + cantidades[1] + cantidades[2];
+            cantidades
+        }
+
+        /// Devuelve un [Vec] con todos los socios no morosos que tienen permitido acceder a la [Actividad] dada.
+        #[ink(message)]
+        pub fn socios_no_morosos_en_actividad(&self, actividad: Actividad) -> Vec<Socio> {
+            // socios guardados por id
+            let mut socios_morosos: Vec<u64> = Vec::new();
+            let mut socios_no_morosos: Vec<u64> = Vec::new();
+            let pagos = self.club.get_pagos(None);
+            let fecha_actual = self.club.obtener_fecha_actual();
+            for pago in pagos {
+                let id_socio = pago.get_socio();
+                if pago.es_moroso(fecha_actual) {
+                    socios_morosos.push(id_socio);
+                } else {
+                    socios_no_morosos.push(id_socio);
+                }
+            }
+            // Quitar los socios que se agregaron varias veces
+            socios_morosos.sort();
+            socios_morosos.dedup();
+            socios_no_morosos.sort();
+            socios_no_morosos.dedup();
+            
+            socios_no_morosos.iter()
+                // Quitar los socios no morosos que están en el vector de socios morosos
+                .filter(|id| socios_morosos.binary_search(id).is_err())
+                // Convertir a Socios
+                .map(|&id| self.club.get_socio(id).unwrap())
+                // Filtrar los que no pueden acceder a la actividad
+                .filter(|s| s.get_categoria().puede_acceder_a(actividad))
+                .collect()
+        }
+    }
+
+    // Todo esto es necesario para los tests :(
+    // #[derive(scale::Encode, Clone)]
+    // #[cfg_attr(
+    //     feature = "std",
+    //     derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    // )]
+    // pub struct ClubFalso {
+    //     club: Club,
+    //     fecha_actual: Fecha,
+    // }
+    // impl core::fmt::Debug for ClubFalso {
+    //     fn fmt(&self, _: &mut core::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { Ok(()) }
+    // }
+    // impl scale::Decode for ClubFalso {
+    //     fn decode<I>(_: &mut I) -> Result<Self, scale::Error> where I: scale::Input { todo!() }
+    // }
+    // #[allow(dead_code)]
+    // impl ClubFalso {
+    //     pub fn new(dueño: AccountId) -> Self {
+    //         let club = Club::new(dueño);
+    //         let fecha_actual = club.obtener_fecha_actual();
+    //         Self {club, fecha_actual}
+    //     }
+    //     pub fn obtener_fecha_actual(&self) -> Fecha {self.fecha_actual}
+    //     pub fn avanzar_dias(&mut self, dias: i32) {
+    //         // para que funcionen los tests, hay que cambiar el block timestamp...
+    //         let nuevo_tiempo = ink_env::block_timestamp::<ink_env::DefaultEnvironment>() as i64 + (dias as i64) * 24 * 60 * 60 * 1000;
+    //         ink_env::test::set_block_timestamp::<ink_env::DefaultEnvironment>(nuevo_tiempo as u64);
+    //         self.fecha_actual.sumar_dias(dias);
+    //     }
+    //     pub fn get_nombre(&self) -> String {self.club.get_nombre()}
+    //     pub fn set_politica_autorizacion(&mut self, usar_la_politica: bool) {self.club.set_politica_autorizacion(usar_la_politica);}
+    //     pub fn soy_el_dueño(&self) -> bool {self.club.soy_el_dueño()}
+    //     pub fn estoy_autorizado(&self) -> bool {self.club.estoy_autorizado()}
+    //     pub fn cambiar_dueño(&mut self, nuevo_dueño: AccountId) {self.club.cambiar_dueño(nuevo_dueño);}
+    //     pub fn get_dueño(&self) -> AccountId {self.club.get_dueño()}
+    //     pub fn agregar_autorizado(&mut self, quien: AccountId) {self.club.agregar_autorizado(quien);}
+    //     pub fn quitar_autorizado(&mut self, quien: AccountId) {self.club.quitar_autorizado(quien);}
+    //     pub fn get_autorizados(&self) -> Vec<AccountId> {self.club.get_autorizados()}
+    //     pub fn cambiar_nombre(&mut self, nuevo_nombre: String) {self.club.cambiar_nombre(nuevo_nombre);}
+    //     pub fn set_precio(&mut self, categoria: Categoria, nuevo_valor: u128) {self.club.set_precio(categoria, nuevo_valor);}
+    //     pub fn get_precio(&self, categoria: Categoria) -> u128 {self.club.get_precio(categoria)}
+    //     pub fn set_cantidad_pagos_bonificacion(&mut self, nuevo_valor:u16) {self.club.set_cantidad_pagos_bonificacion(nuevo_valor);}
+    //     pub fn get_cantidad_pagos_bonificacion(&self) -> u16 {self.club.get_cantidad_pagos_bonificacion()}
+    //     pub fn set_porcentaje_bonificacion_pagos_consecutivos(&mut self, nuevo_valor: u8) {self.club.set_porcentaje_bonificacion_pagos_consecutivos(nuevo_valor)}
+    //     pub fn get_porcentaje_bonificacion_pagos_consecutivos(&self) -> u8 {self.club.get_porcentaje_bonificacion_pagos_consecutivos()}
+    //     pub fn get_socios(&self) -> Vec<Socio> {self.club.get_socios()}
+    //     pub fn get_pagos(&self, socio: Option<u128>)-> Vec<Pago>{self.club.get_pagos(socio)}
+    //     pub fn registrar_nuevo_socio(&mut self, dni: u128, nombre: String, categoria:Categoria) {self.club.registrar_nuevo_socio(dni, nombre, categoria);}
+    //     pub fn get_socio(&self, id: u64) -> Option<Socio> {self.club.get_socio(id)}
+    //     pub fn realizar_pago(&mut self, dni: u128, monto: u128) {self.club.realizar_pago(dni, monto);}
+    // }
+}
+
+// #[cfg(test)]
+// mod tests {
+//     use std::collections::HashSet;
+
+//     use ink_env::{DefaultEnvironment};
+//     use trabajo_final::trabajo_final::{Socio, Categoria::*, Actividad::*};
+
+//     use crate::trabajo_final_reporte::{TrabajoFinalReporte, ClubFalso};
+
+//     fn generar<'a>() -> TrabajoFinalReporte {
+//         let mut club = ClubFalso::new(ink_env::test::default_accounts::<DefaultEnvironment>().alice);
+//         club.set_politica_autorizacion(false);
+//         TrabajoFinalReporte::new(club)
+//     }
+
+//     #[ink::test]
+//     fn obtener_socios_morosos_test() {
+//         let mut contrato = generar();
+//         // no hay morosos al principio
+//         assert_eq!(contrato.obtener_socios_morosos(), vec![]);
+//         contrato.club().registrar_nuevo_socio(0, "Alicia".into(), CategoriaA);
+//         contrato.club().registrar_nuevo_socio(1, "Bob".into(), CategoriaB(Paddle));
+//         contrato.club().registrar_nuevo_socio(2, "Carlos".into(), CategoriaC);
+        
+//         // No son morosos al día de registrarse
+//         assert_eq!(contrato.obtener_socios_morosos(), vec![]);
+//         contrato.club().avanzar_dias(9);
+//         // Sigue sin haber morosos porque no pasaron los 10 días
+//         assert_eq!(contrato.obtener_socios_morosos(), vec![]);
+//         contrato.club().avanzar_dias(2);
+//         // Todos son morosos
+//         let morosos = contrato.obtener_socios_morosos();
+//         let morosos: HashSet<u128> = HashSet::from_iter(morosos.iter().map(|s| s.get_dni()));
+//         assert!(morosos.contains(&0));
+//         assert!(morosos.contains(&1));
+//         assert!(morosos.contains(&2));
+
+//         // Bob ya no es moroso, por un mes
+//         let monto = contrato.club().get_precio(CategoriaB(Paddle));
+//         contrato.club().realizar_pago(1, monto);
+//         contrato.club().avanzar_dias(29);
+//         let morosos = contrato.obtener_socios_morosos();
+//         let morosos: HashSet<u128> = HashSet::from_iter(morosos.iter().map(|s| s.get_dni()));
+//         assert!(morosos.contains(&0));
+//         assert!(!morosos.contains(&1));
+//         assert!(morosos.contains(&2));
+
+//         contrato.club().avanzar_dias(2);
+//         // Todos son morosos otra vez
+//         let morosos = contrato.obtener_socios_morosos();
+//         let morosos: HashSet<u128> = HashSet::from_iter(morosos.iter().map(|s| s.get_dni()));
+//         assert!(morosos.contains(&0));
+//         assert!(morosos.contains(&1));
+//         assert!(morosos.contains(&2));
+//     }
+
+//     fn recaudacion(cat_a: u128, cat_b: u128, cat_c: u128) -> [u128; 4] {
+//         [ cat_a, cat_b, cat_c, cat_a + cat_b + cat_c ]
+//     }
+//     #[ink::test]
+//     fn informe_recaudacion_test() {
+//         let mut contrato = generar();
+//         // Para evitar problemas con el mes
+//         if contrato.club().obtener_fecha_actual().get_dia() <= 5 {
+//             contrato.club().avanzar_dias(5);
+//         }
+//         let año = contrato.club().obtener_fecha_actual().get_año();
+//         let mes = contrato.club().obtener_fecha_actual().get_mes();
+//         // Al principio es 0
+//         assert_eq!(contrato.informe_recaudacion(año, mes), recaudacion(0, 0, 0));
+//         // Setup de precios y socios
+//         contrato.club().set_precio(CategoriaA, 3000);
+//         contrato.club().set_precio(CategoriaB(Futbol), 2000);
+//         contrato.club().set_precio(CategoriaC, 1000);
+//         contrato.club().set_cantidad_pagos_bonificacion(1);
+//         contrato.club().set_porcentaje_bonificacion_pagos_consecutivos(50);
+//         contrato.club().registrar_nuevo_socio(0, "Alicia".into(), CategoriaA);
+//         contrato.club().registrar_nuevo_socio(1, "Bob".into(), CategoriaB(Paddle));
+//         contrato.club().registrar_nuevo_socio(2, "Carlos".into(), CategoriaC);
+//         contrato.club().registrar_nuevo_socio(3, "Dilan".into(), CategoriaC);
+//         // Todos pagan el primer mes
+//         contrato.club().realizar_pago(0, 3000);
+//         contrato.club().realizar_pago(1, 2000);
+//         contrato.club().realizar_pago(2, 1000);
+//         contrato.club().realizar_pago(3, 1000);
+        
+//         assert_eq!(contrato.informe_recaudacion(año, mes), recaudacion(3000, 2000, 2000));
+//         // En el siguiente mes se recauda con descuentos
+//         contrato.club().avanzar_dias(30);
+//         assert_eq!(contrato.informe_recaudacion(año, mes + 1), recaudacion(0, 0, 0));
+//         contrato.club().realizar_pago(1, 1000);
+//         contrato.club().realizar_pago(3, 500);
+//         assert_eq!(contrato.informe_recaudacion(año, mes + 1), recaudacion(0, 1000, 500));
+//         // Las recaudaciones del primer mes siguen estando
+//         assert_eq!(contrato.informe_recaudacion(año, mes), recaudacion(3000, 2000, 2000));
+//     }
+
+//     fn socios_a_dni(socios: Vec<Socio>) -> Vec<u128> {
+//         let mut socios: Vec<u128> = socios.iter().map(|s| s.get_dni()).collect();
+//         socios.sort();
+//         socios
+//     }
+    
+//     #[ink::test]
+//     fn socios_no_morosos_en_actividad_test() {
+//         let mut contrato = generar();
+//         // Al principio no hay nadie
+//         assert_eq!(contrato.socios_no_morosos_en_actividad(Gimnasio), vec![]);
+//         assert_eq!(contrato.socios_no_morosos_en_actividad(Futbol), vec![]);
+//         assert_eq!(contrato.socios_no_morosos_en_actividad(Paddle), vec![]);
+
+//         contrato.club().registrar_nuevo_socio(0, "Alicia".into(), CategoriaA);
+//         contrato.club().registrar_nuevo_socio(1, "Bob".into(), CategoriaB(Futbol));
+//         contrato.club().registrar_nuevo_socio(2, "Carlos".into(), CategoriaC);
+
+        
+//         assert_eq!(socios_a_dni(contrato.socios_no_morosos_en_actividad(Gimnasio)), vec![0, 1, 2]);
+//         assert_eq!(socios_a_dni(contrato.socios_no_morosos_en_actividad(Futbol)), vec![0, 1]);
+//         assert_eq!(socios_a_dni(contrato.socios_no_morosos_en_actividad(Paddle)), vec![0]);
+        
+//         // Pasan los 10 días y sólo Bob paga
+//         contrato.club().avanzar_dias(15);
+//         let monto = contrato.club().get_precio(CategoriaB(Futbol));
+//         contrato.club().realizar_pago(1, monto);
+
+//         assert_eq!(socios_a_dni(contrato.socios_no_morosos_en_actividad(Gimnasio)), vec![1]);
+//         assert_eq!(socios_a_dni(contrato.socios_no_morosos_en_actividad(Futbol)), vec![1]);
+//         assert_eq!(socios_a_dni(contrato.socios_no_morosos_en_actividad(Paddle)), vec![]);
+//     }
+// }

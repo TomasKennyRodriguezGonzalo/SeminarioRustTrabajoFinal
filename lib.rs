@@ -1,8 +1,14 @@
+/*
+    NOTA:
+    a pesar del [cfg(test)], las cosas relacionadas a los test generan error al hacer cargo contract build.
+    lib_sin_errores.txt tiene el contenido de este archivo pero con las cosas que causan errores comentadas
+    para poder hacer el cargo contract build
+ */
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 #[ink::contract]
 mod trabajo_final_reporte {
     use ink::prelude::string::String;
-    use ink::prelude::collections::HashSet;
+    use ink::prelude::vec::Vec;
     use trabajo_final::ClubRef;
     use trabajo_final::trabajo_final::{Club, Socio, Actividad, Categoria, Pago};
     use trabajo_final::fecha::Fecha;
@@ -55,14 +61,18 @@ mod trabajo_final_reporte {
         #[ink(message)]
         pub fn obtener_socios_morosos(&self) -> Vec<Socio> {
             // socios guardados por id
-            let mut socios_morosos: HashSet<u64> = HashSet::new();
+            let mut socios_morosos: Vec<u64> = Vec::new();
             let pagos = self.club.get_pagos(None);
             let fecha_actual = self.club.obtener_fecha_actual();
             for pago in pagos {
                 if pago.es_moroso(fecha_actual) {
-                    socios_morosos.insert(pago.get_socio());
+                    socios_morosos.push(pago.get_socio());
                 }
             }
+            // Quitar los socios que se agregaron varias veces
+            socios_morosos.sort();
+            socios_morosos.dedup();
+
             socios_morosos.iter().map(|&id| self.club.get_socio(id).unwrap()).collect()
         }
 
@@ -89,23 +99,30 @@ mod trabajo_final_reporte {
         #[ink(message)]
         pub fn socios_no_morosos_en_actividad(&self, actividad: Actividad) -> Vec<Socio> {
             // socios guardados por id
-            let mut socios_morosos: HashSet<u64> = HashSet::new();
-            let mut socios_no_morosos: HashSet<u64> = HashSet::new();
+            let mut socios_morosos: Vec<u64> = Vec::new();
+            let mut socios_no_morosos: Vec<u64> = Vec::new();
             let pagos = self.club.get_pagos(None);
             let fecha_actual = self.club.obtener_fecha_actual();
             for pago in pagos {
                 let id_socio = pago.get_socio();
                 if pago.es_moroso(fecha_actual) {
-                    socios_morosos.insert(id_socio);
-                    socios_no_morosos.remove(&id_socio);
+                    socios_morosos.push(id_socio);
                 } else {
-                    if !socios_morosos.contains(&id_socio) {
-                        socios_no_morosos.insert(id_socio);
-                    }
+                    socios_no_morosos.push(id_socio);
                 }
             }
+            // Quitar los socios que se agregaron varias veces
+            socios_morosos.sort();
+            socios_morosos.dedup();
+            socios_no_morosos.sort();
+            socios_no_morosos.dedup();
+            
             socios_no_morosos.iter()
+                // Quitar los socios no morosos que están en el vector de socios morosos
+                .filter(|id| socios_morosos.binary_search(id).is_err())
+                // Convertir a Socios
                 .map(|&id| self.club.get_socio(id).unwrap())
+                // Filtrar los que no pueden acceder a la actividad
                 .filter(|s| s.get_categoria().puede_acceder_a(actividad))
                 .collect()
         }
